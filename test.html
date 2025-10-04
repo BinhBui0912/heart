@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Heart</title>
+  <style>
+    :root{--bg1:#0b0711;--bg2:#26022a;--panel:rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;color:#fff}
+    body{display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%, #2b0236 0%, var(--bg1) 40%), linear-gradient(180deg, rgba(255,255,255,0.02), transparent)}
+  .stage{width:92vw;max-width:1100px;height:78vh;max-height:760px;border-radius:14px;overflow:hidden;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,0.6);backdrop-filter:blur(6px)}
+    .canvas-wrap{position:relative;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));overflow:hidden}
+    canvas{display:block;width:100%;height:100%}
+    .panel{width:320px;padding:12px;display:flex;flex-direction:column;gap:12px}
+    .card{background:var(--panel);padding:12px;border-radius:10px}
+    label{font-size:13px;color:#ffd6ea;margin-bottom:6px}
+    input[type=range]{width:100%}
+    .controls-row{display:flex;gap:8px}
+    .btn{border:0;padding:10px 12px;border-radius:10px;background:#ff4b7b;color:#fff;cursor:pointer}
+    .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .muted{color:#ddd;opacity:0.85;font-size:13px}
+    .title{font-weight:700;color:#ffafc8}
+    .center-badge{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;text-align:center}
+    .center-badge h1{margin:0;font-size:28px;color:#fff;text-shadow:0 6px 28px rgba(255,75,123,0.12)}
+    .signature{font-size:14px;color:#ffd6ea;opacity:0.9}
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="canvas-wrap card" style="height:100%">
+      <canvas id="c"></canvas>
+      <div class="center-badge">
+        <h1 class="title">Hà Xinh Gái</h1>
+        <div class="signature muted">Nhấn vào trái tim</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* Polished animated heart with particles
+   - Retina-aware canvas
+   - Smooth easing for particles
+   - Control overlay (pause/clear/speed/size/toggle/burst)
+*/
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let DPR = Math.max(1, window.devicePixelRatio || 1);
+
+function resizeCanvas(){
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.round(rect.width * DPR);
+  canvas.height = Math.round(rect.height * DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+new ResizeObserver(resizeCanvas).observe(canvas);
+resizeCanvas();
+
+// Fixed settings (no control panel)
+const FIXED_SPEED = 1.0; // fixed heart pulse speed
+const DEFAULT_SIZE = 1.0; // fixed scale
+let running = true;
+let emitParticles = true;
+let maxParticles = 500;
+
+// Heart parametric
+function heartPoint(t){
+  const x = 16 * Math.pow(Math.sin(t),3);
+  const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+  return {x,y};
+}
+
+// Particle
+class Particle {
+  constructor(x,y,dx,dy,color,life){
+    this.x = x; this.y = y; this.vx = dx; this.vy = dy; this.color = color; this.life = life || 1.2; this.age = 0; this.s = Math.random()*3+1.2;
+  }
+  update(dt){
+    this.age += dt;
+    this.vx *= 0.995; this.vy += 20*dt; // gravity-like
+    this.x += this.vx * dt * 60; this.y += this.vy * dt * 60;
+  }
+  draw(ctx){
+    const a = Math.max(0, 1 - this.age/this.life);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = a;
+    const g = ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.s*2);
+    g.addColorStop(0, this.color);
+    g.addColorStop(0.5, this.color.replace('1)', '0.65)'));
+    g.addColorStop(1, this.color.replace('1)', '0)'));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.s*a,0,Math.PI*2); ctx.fill(); ctx.restore();
+  }
+}
+
+// Holds particles
+let particles = [];
+
+function emitFromHeart(scale, count){
+  const rect = canvas.getBoundingClientRect();
+  const cx = rect.width/2; const cy = rect.height/2.4;
+  const sx = scale * 12;
+  for(let i=0;i<count && particles.length < maxParticles;i++){
+    const t = Math.random()*Math.PI*2;
+    const p = heartPoint(t);
+    const x = cx + p.x * sx + (Math.random()-0.5)*6;
+    const y = cy - p.y * sx + (Math.random()-0.5)*6;
+    const hue = 330 + Math.random()*50;
+    const color = `hsla(${hue},80%,60%,1)`;
+    const vx = (Math.random()-0.5)*6;
+    const vy = -Math.random()*6 - 1;
+    particles.push(new Particle(x,y,vx,vy,color,0.9 + Math.random()*1.6));
+  }
+}
+
+// Create a nicer particle image for older code compatibility (not used but kept)
+function createParticleImage(size){
+  const tmp = document.createElement('canvas');
+  tmp.width = tmp.height = size;
+  const g = tmp.getContext('2d');
+  const grad = g.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+  grad.addColorStop(0,'rgba(255,255,255,1)');
+  grad.addColorStop(0.5,'rgba(255,120,180,0.8)');
+  grad.addColorStop(1,'rgba(255,120,180,0)');
+  g.fillStyle = grad; g.beginPath(); g.arc(size/2,size/2,size/2,0,Math.PI*2); g.fill();
+  const img = new Image(); img.src = tmp.toDataURL(); return img;
+}
+
+// Draw heart outline & fill
+function drawHeart(scale, pulse){
+  const rect = canvas.getBoundingClientRect();
+  const cx = rect.width/2; const cy = rect.height/2.4;
+  const sx = scale * 12 * (0.9 + 0.12*pulse);
+
+  ctx.save();
+  ctx.beginPath();
+  const steps = 160;
+  for(let i=0;i<=steps;i++){
+    const t = i/steps * Math.PI*2;
+    const p = heartPoint(t);
+    const x = cx + p.x * sx; const y = cy - p.y * sx;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.closePath();
+
+  // gradient fill
+  const g = ctx.createLinearGradient(cx,cy-sx, cx, cy+sx);
+  g.addColorStop(0, '#ff9bbf'); g.addColorStop(0.45, '#ff4b7b'); g.addColorStop(1, '#a1003a');
+  ctx.fillStyle = g;
+  ctx.shadowColor = 'rgba(255,75,123,0.22)'; ctx.shadowBlur = 36 * (0.9 + 0.12*pulse);
+  ctx.fill();
+
+  // soft stroke
+  ctx.shadowBlur = 0; ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.stroke();
+
+  // inner soft glow
+  ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,220,230,0.05)'; ctx.fill(); ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+}
+
+let last = performance.now();
+let time = 0;
+
+function loop(now){
+  if(!running){ last = now; requestAnimationFrame(loop); return; }
+  const dt = Math.min(0.05, (now - last)/1000); last = now; time += dt;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // background subtle
+  const rect = canvas.getBoundingClientRect();
+  const bg = ctx.createLinearGradient(0,0,0,rect.height);
+  bg.addColorStop(0,'rgba(255,255,255,0.01)'); bg.addColorStop(1,'rgba(0,0,0,0.06)');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,rect.width,rect.height);
+
+  const speed = FIXED_SPEED;
+  const size = DEFAULT_SIZE;
+  const pulse = (Math.sin(time * Math.PI * speed) + 1)/2;
+
+  // emit continuously
+  if(emitParticles){
+    const emitRate = 20 * speed; const should = emitRate * dt; const cnt = Math.floor(should + Math.random());
+    emitFromHeart(size, cnt);
+  }
+
+  // update particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p = particles[i]; p.update(dt);
+    if(p.age > p.life) particles.splice(i,1);
+  }
+
+  // draw heart and particles (heart below so particles appear in front)
+  drawHeart(size, pulse);
+  for(const p of particles) p.draw(ctx);
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// interactions
+canvas.addEventListener('click', (e)=>{
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  for(let i=0;i<42;i++){
+    const hue = 330 + Math.random()*50; const color = `hsla(${hue},82%,60%,1)`;
+    const vx = (Math.random()-0.5)*8; const vy = -Math.random()*8 - 2; const s = 2 + Math.random()*4;
+    const pt = new Particle(x + (Math.random()-0.5)*30, y + (Math.random()-0.5)*30, vx, vy, color, 0.8 + Math.random()*1.6);
+    pt.s = s; particles.push(pt);
+  }
+});
+// accessibility: keyboard (Space toggles running)
+//window.addEventListener('keydown', (e)=>{ if(e.key === ' '){ running = !running; } });
+
+</script>
+</body>
+</html>
